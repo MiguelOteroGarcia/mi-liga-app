@@ -4,10 +4,10 @@ import { useState, Suspense } from "react";
 import { supabase } from "../../lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 
-function CrearLigaContent() {
+function FormularioCrearLiga() {
   const [nombre, setNombre] = useState("");
   const searchParams = useSearchParams();
-  const tipo = searchParams.get('tipo'); // Obtenemos 'porra' o 'quiniela' directamente de la URL
+  const tipo = searchParams.get('tipo');
   const router = useRouter();
 
   const crearNuevaLiga = async () => {
@@ -16,7 +16,7 @@ function CrearLigaContent() {
 
     const { error } = await supabase
       .from('leagues')
-      .insert([{ name: nombre, gmae_type: tipo }]); // Usamos gmae_type para que coincida con tu BD actual
+      .insert([{ name: nombre, gmae_type: tipo }]);
 
     if (error) {
       alert("Error al crear la liga: " + error.message);
@@ -48,10 +48,10 @@ function CrearLigaContent() {
   );
 }
 
-export default function CrearLiga() {
+export default function CrearLigaPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center">Cargando...</div>}>
-      <CrearLigaContent />
+    <Suspense fallback={<div className="p-8 text-center">Cargando formulario...</div>}>
+      <FormularioCrearLiga />
     </Suspense>
   );
 }
