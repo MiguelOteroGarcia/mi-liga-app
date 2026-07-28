@@ -16,15 +16,38 @@ function FormularioCrearLiga() {
     if (!nombre) return alert("Por favor, introduce un nombre para la liga.");
     if (!tipo) return alert("Error: tipo de liga no definido.");
 
-    const { error } = await supabase
-      .from('leagues')
-      .insert([{ name: nombre, game_type: tipo }]);
-
-    if (error) {
-      alert("Error al crear la liga: " + error.message);
-    } else {
-      router.push('/dashboard');
+    // 1. Obtener el usuario autenticado actual
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      alert("Debes iniciar sesión para crear una liga.");
+      router.push('/login');
+      return;
     }
+
+    // 2. Crear la liga y recuperar el ID generado
+    const { data: ligaData, error: ligaError } = await supabase
+      .from('leagues')
+      .insert([{ name: nombre, game_type: tipo }])
+      .select()
+      .single();
+
+    if (ligaError) {
+      alert("Error al crear la liga: " + ligaError.message);
+      return;
+    }
+
+    // 3. Añadir automáticamente al usuario como miembro/admin en la tabla correspondiente
+    // (Asegúrate de que tu tabla de miembros se llama league_members o ajusta el nombre si difiere)
+    const { error: memberError } = await supabase
+      .from('league_members')
+      .insert([{ league_id: ligaData.id, user_id: user.id }]);
+
+    if (memberError) {
+      console.error("Error al añadir miembro:", memberError.message);
+    }
+
+    // Redirigir al dashboard o a la vista de la liga
+    router.push('/dashboard');
   };
 
   return (
