@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { supabase } from "../../lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function CrearLiga() {
+function CrearLigaContent() {
   const [nombre, setNombre] = useState("");
   const searchParams = useSearchParams();
   const tipo = searchParams.get('tipo'); // Obtenemos 'porra' o 'quiniela' directamente de la URL
@@ -45,5 +45,13 @@ export default function CrearLiga() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function CrearLiga() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Cargando...</div>}>
+      <CrearLigaContent />
+    </Suspense>
   );
 }
