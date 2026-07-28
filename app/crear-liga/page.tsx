@@ -18,7 +18,7 @@ function FormularioCrearLiga() {
 
     const { error } = await supabase
       .from('leagues')
-      .insert([{ name: nombre, gmae_type: tipo }]);
+      .insert([{ name: nombre, game_type: tipo }]);
 
     if (error) {
       alert("Error al crear la liga: " + error.message);
