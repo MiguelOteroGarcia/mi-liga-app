@@ -9,7 +9,7 @@ export default function SalaLiga() {
   const router = useRouter();
   const [liga, setLiga] = useState<any>(null);
   const [partidos, setPartidos] = useState<any[]>([]);
-  const [jornadaActual, setJornadaActual] = useState(1);
+  const [jornadaActual, setJornadaActual] = useState(0); // Empezamos por defecto en la jornada 0 de amistosos o 1
   const [apuestas, setApuestas] = useState<Record<string, any>>({});
   const [vista, setVista] = useState<'clasificacion' | 'resultados' | 'configuracion' | 'notificaciones'>('resultados');
   const [clasificacion, setClasificacion] = useState<any[]>([]);
@@ -37,7 +37,7 @@ export default function SalaLiga() {
         setEsAdmin(true);
       }
 
-      cargarPartidos(1);
+      cargarPartidos(0); // Cargamos por defecto la jornada 0 (Amistosos)
       cargarNotificaciones();
     }
     init();
@@ -220,30 +220,49 @@ export default function SalaLiga() {
 
       {vista === 'resultados' ? (
         <>
-          <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+          {/* Selector de jornadas incluyendo la Jornada 0 de Amistosos */}
+          <div className="flex gap-2 mb-6 overflow-x-auto pb-2 items-center">
+            <button 
+              onClick={() => cargarPartidos(0)} 
+              className={`px-3 py-1 border rounded font-bold ${jornadaActual === 0 ? 'bg-blue-600 text-white' : 'bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-200'}`}
+            >
+              🟡 Amistosos (J0)
+            </button>
+
             {[...Array(38)].map((_, i) => (
-              <button key={i+1} onClick={() => cargarPartidos(i+1)} className={`px-3 py-1 border rounded ${jornadaActual === i+1 ? 'bg-blue-600 text-white' : 'bg-white'}`}>J{i+1}</button>
+              <button 
+                key={i+1} 
+                onClick={() => cargarPartidos(i+1)} 
+                className={`px-3 py-1 border rounded ${jornadaActual === i+1 ? 'bg-blue-600 text-white' : 'bg-white'}`}
+              >
+                J{i+1}
+              </button>
             ))}
           </div>
-          {partidos.map((p) => (
-            <div key={p.id} className="bg-white p-4 rounded shadow mb-2 flex justify-between items-center">
-              <span>{p.home_team} vs {p.away_team} {p.status === 'finished' && `(${p.home_score} - ${p.away_score})`}</span>
-              {liga?.game_type === 'porra' ? (
-                <div className="flex gap-2">
-                  <input type="number" defaultValue={apuestas[p.id]?.home} onChange={(e) => setApuestas({...apuestas, [p.id]: {...apuestas[p.id], home: e.target.value}})} className="w-12 border p-1"/>
-                  <input type="number" defaultValue={apuestas[p.id]?.away} onChange={(e) => setApuestas({...apuestas, [p.id]: {...apuestas[p.id], away: e.target.value}})} className="w-12 border p-1"/>
-                  <button onClick={() => guardar(p.id)} className="bg-blue-500 text-white px-2 rounded">Ok</button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  {['1', 'X', '2'].map(op => (
-                    <button key={op} onClick={() => setApuestas({...apuestas, [p.id]: op})} className={`px-3 py-1 border rounded ${apuestas[p.id] === op ? 'bg-green-500 text-white' : 'bg-gray-100'}`}>{op}</button>
-                  ))}
-                  <button onClick={() => guardar(p.id)} className="bg-green-600 text-white px-2 rounded">Ok</button>
-                </div>
-              )}
-            </div>
-          ))}
+
+          {partidos.length === 0 ? (
+            <p className="text-gray-500 italic bg-white p-6 rounded shadow">No hay partidos programados para esta jornada.</p>
+          ) : (
+            partidos.map((p) => (
+              <div key={p.id} className="bg-white p-4 rounded shadow mb-2 flex justify-between items-center">
+                <span>{p.home_team} vs {p.away_team} {p.status === 'finished' && `(${p.home_score} - ${p.away_score})`}</span>
+                {liga?.game_type === 'porra' ? (
+                  <div className="flex gap-2">
+                    <input type="number" defaultValue={apuestas[p.id]?.home} onChange={(e) => setApuestas({...apuestas, [p.id]: {...apuestas[p.id], home: e.target.value}})} className="w-12 border p-1"/>
+                    <input type="number" defaultValue={apuestas[p.id]?.away} onChange={(e) => setApuestas({...apuestas, [p.id]: {...apuestas[p.id], away: e.target.value}})} className="w-12 border p-1"/>
+                    <button onClick={() => guardar(p.id)} className="bg-blue-500 text-white px-2 rounded">Ok</button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    {['1', 'X', '2'].map(op => (
+                      <button key={op} onClick={() => setApuestas({...apuestas, [p.id]: op})} className={`px-3 py-1 border rounded ${apuestas[p.id] === op ? 'bg-green-500 text-white' : 'bg-gray-100'}`}>{op}</button>
+                    ))}
+                    <button onClick={() => guardar(p.id)} className="bg-green-600 text-white px-2 rounded">Ok</button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </>
       ) : vista === 'clasificacion' ? (
         <div className="bg-white p-6 rounded shadow">
