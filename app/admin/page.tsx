@@ -14,6 +14,7 @@ function AdminContent() {
   const [puntosExtra, setPuntosExtra] = useState<Record<string, string>>({});
   const [cargando, setCargando] = useState(true);
   const [esAutorizado, setEsAutorizado] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
 
   useEffect(() => {
     async function verificarYCargar() {
@@ -22,14 +23,12 @@ function AdminContent() {
         return;
       }
 
-      // 1. Obtener usuario actual
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.push('/login');
         return;
       }
 
-      // 2. Cargar info de la liga
       const { data: l } = await supabase.from('leagues').select('*').eq('id', ligaId).single();
       
       if (!l) {
@@ -39,16 +38,14 @@ function AdminContent() {
 
       setLiga(l);
 
-      // 3. Comprobar si el usuario actual es el administrador de esta liga
       const esAdminDeLiga = l.admin_ === user.id || l.admin_id === user.id;
       if (!esAdminDeLiga) {
         setCargando(false);
-        return; // No autorizado
+        return;
       }
 
       setEsAutorizado(true);
 
-      // 4. Cargar miembros de esta liga
       const { data: mems } = await supabase
         .from('league_members')
         .select('user_id')
@@ -108,6 +105,36 @@ function AdminContent() {
     window.location.reload();
   };
 
+  const eliminarLiga = async () => {
+    const confirmacion = window.confirm(
+      "¿Estás totalmente seguro de que quieres eliminar esta liga? Esta acción borrará todos sus datos y no se puede deshacer."
+    );
+
+    if (!confirmacion) return;
+
+    setEliminando(true);
+
+    // Borrar dependencias asociadas a la liga para evitar restricciones de clave foránea
+    await supabase.from('league_members').delete().eq('league_id', ligaId);
+    await supabase.from('bets').delete().eq('league_id', ligaId);
+    await supabase.from('manual_points').delete().eq('league_id', ligaId);
+    await supabase.from('notifications').delete().eq('league_id', ligaId);
+
+    // Borrar la liga
+    const { error } = await supabase
+      .from('leagues')
+      .delete()
+      .eq('id', ligaId);
+
+    if (error) {
+      alert("Error al eliminar la liga: " + error.message);
+      setEliminando(false);
+    } else {
+      alert("La liga ha sido eliminada correctamente.");
+      router.push('/dashboard');
+    }
+  };
+
   if (cargando) {
     return <div className="p-8 text-center">Verificando permisos de administrador...</div>;
   }
@@ -129,7 +156,7 @@ function AdminContent() {
         <button onClick={() => router.push(`/liga/${ligaId}`)} className="text-blue-600 font-bold">← Volver a la Liga</button>
       </div>
 
-      <div className="bg-white p-6 rounded shadow">
+      <div className="bg-white p-6 rounded shadow mb-8">
         <h2 className="text-xl font-bold mb-2">Liga: {liga?.name}</h2>
         <p className="text-sm text-gray-600 mb-6">Establece los puntos manuales para los participantes de esta liga.</p>
 
@@ -158,6 +185,19 @@ function AdminContent() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ZONA PELIGROSA: ELIMINAR LIGA */}
+      <div className="bg-white p-6 rounded shadow border border-red-200">
+        <h2 className="text-xl font-bold text-red-600 mb-2">Zona Peligrosa</h2>
+        <p className="text-sm text-gray-600 mb-4">Si eliminas esta liga, se borrará de forma permanente para todos los usuarios.</p>
+        <button 
+          onClick={eliminarLiga}
+          disabled={eliminando}
+          className="bg-red-600 text-white px-4 py-2 rounded font-bold hover:bg-red-700 transition-all disabled:opacity-50"
+        >
+          {eliminando ? "Eliminando..." : "🗑️ Eliminar Liga Permanentemente"}
+        </button>
       </div>
     </main>
   );

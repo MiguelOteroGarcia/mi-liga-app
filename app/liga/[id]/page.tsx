@@ -19,6 +19,7 @@ export default function SalaLiga() {
 
   const [ptsExactoInput, setPtsExactoInput] = useState(3);
   const [ptsSignoInput, setPtsSignoInput] = useState(1);
+  const [nombreLigaInput, setNombreLigaInput] = useState("");
 
   useEffect(() => {
     async function init() {
@@ -29,6 +30,7 @@ export default function SalaLiga() {
       if (l) {
         setPtsExactoInput(l['points_exact_2.0'] ?? 3);
         setPtsSignoInput(l['points_sign_2.0'] ?? 1);
+        setNombreLigaInput(l.name ?? "");
       }
       
       if (user && l && (l.admin_ === user.id || l.admin_id === user.id)) {
@@ -57,41 +59,40 @@ export default function SalaLiga() {
     const lista = data || [];
     setNotificaciones(lista);
 
-    // Obtenemos cuántas notificaciones vio la última vez el usuario en este navegador
     const vistasGuardadas = Number(localStorage.getItem(`leidas_count_${id}`) || 0);
     const totalActual = lista.length;
-
-    // Las no leídas son la diferencia entre las que hay ahora y las que ya vio
     const noLeidas = Math.max(0, totalActual - vistasGuardadas);
     setNotificacionesNoLeidas(noLeidas);
   };
 
   const verNotificaciones = () => {
     setVista('notificaciones');
-    setNotificacionesNoLeidas(0); // Ponemos el círculo a cero visualmente
-    
-    // Guardamos el total actual como "ya leído" para que no vuelvan a contar como nuevas
+    setNotificacionesNoLeidas(0);
     localStorage.setItem(`leidas_count_${id}`, notificaciones.length.toString());
   };
 
-  const guardarConfiguracionPuntos = async () => {
+  const guardarConfiguracionLiga = async () => {
+    if (!nombreLigaInput.trim()) return alert("El nombre de la liga no puede estar vacío.");
+
     const { error } = await supabase
       .from('leagues')
       .update({
+        name: nombreLigaInput,
         'points_exact_2.0': Number(ptsExactoInput),
         'points_sign_2.0': Number(ptsSignoInput)
       })
       .eq('id', id);
 
     if (error) {
-      alert("Error al actualizar puntos: " + error.message);
+      alert("Error al actualizar la configuración: " + error.message);
     } else {
-      const mensajeNoti = `El administrador ha actualizado la configuración de puntuación de la liga (Pleno: ${ptsExactoInput}, Signo: ${ptsSignoInput}).`;
+      const mensajeNoti = `El administrador ha actualizado la configuración de la liga (Nombre: ${nombreLigaInput}, Pleno: ${ptsExactoInput}, Signo: ${ptsSignoInput}).`;
       await supabase.from('notifications').insert([{ league_id: id, message: mensajeNoti }]);
 
-      alert("¡Puntos de la liga actualizados y notificación enviada!");
+      alert("¡Configuración actualizada con éxito!");
       setLiga({
         ...liga,
+        name: nombreLigaInput,
         'points_exact_2.0': Number(ptsExactoInput),
         'points_sign_2.0': Number(ptsSignoInput)
       });
@@ -284,8 +285,18 @@ export default function SalaLiga() {
         </div>
       ) : (
         <div className="bg-white p-6 rounded shadow max-w-lg">
-          <h2 className="text-xl font-bold mb-4">Configuración de Puntuación</h2>
+          <h2 className="text-xl font-bold mb-4">Configuración de la Liga</h2>
           <div className="flex flex-col gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de la Liga</label>
+              <input 
+                type="text" 
+                value={nombreLigaInput} 
+                onChange={(e) => setNombreLigaInput(e.target.value)}
+                className="border p-2 rounded w-full"
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 {liga?.game_type === 'porra' ? 'Puntos por Resultado Exacto (Pleno)' : 'Puntos por Acertar Quiniela (1X2)'}
@@ -311,7 +322,7 @@ export default function SalaLiga() {
             )}
 
             <button 
-              onClick={guardarConfiguracionPuntos}
+              onClick={guardarConfiguracionLiga}
               className="bg-blue-600 text-white p-3 rounded font-bold hover:bg-blue-700 mt-2"
             >
               Guardar Cambios
