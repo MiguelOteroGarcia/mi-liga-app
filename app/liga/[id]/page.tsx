@@ -9,8 +9,9 @@ export default function SalaLiga() {
   const router = useRouter();
   const [liga, setLiga] = useState<any>(null);
   const [partidos, setPartidos] = useState<any[]>([]);
-  const [jornadaActual, setJornadaActual] = useState(0); // Empezamos por defecto en la jornada 0 de amistosos o 1
+  const [jornadaActual, setJornadaActual] = useState(0);
   const [apuestas, setApuestas] = useState<Record<string, any>>({});
+  const [misApuestasGuardadas, setMisApuestasGuardadas] = useState<Record<string, any>>({});
   const [vista, setVista] = useState<'clasificacion' | 'resultados' | 'configuracion' | 'notificaciones'>('resultados');
   const [clasificacion, setClasificacion] = useState<any[]>([]);
   const [notificaciones, setNotificaciones] = useState<any[]>([]);
@@ -37,7 +38,7 @@ export default function SalaLiga() {
         setEsAdmin(true);
       }
 
-      cargarPartidos(0); // Cargamos por defecto la jornada 0 (Amistosos)
+      cargarPartidos(0);
       cargarNotificaciones();
     }
     init();
@@ -47,6 +48,40 @@ export default function SalaLiga() {
     setJornadaActual(j);
     const { data: p } = await supabase.from('matches').select('*').eq('jornada', j);
     setPartidos(p || []);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && p && p.length > 0) {
+      const matchIds = p.map(match => match.id);
+      const { data: userBets } = await supabase
+        .from('bets')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('match_id', matchIds);
+
+      if (userBets) {
+        const mapaApuestas: Record<string, any> = {};
+        const mapaGuardadas: Record<string, any> = {};
+
+        userBets.forEach(bet => {
+          if (liga?.game_type === 'quiniela') {
+            mapaApuestas[bet.match_id] = bet.prediction_1x2;
+            mapaGuardadas[bet.match_id] = bet.prediction_1x2;
+          } else {
+            mapaApuestas[bet.match_id] = {
+              home: bet.predicted_home_score,
+              away: bet.predicted_away_score
+            };
+            mapaGuardadas[bet.match_id] = {
+              home: bet.predicted_home_score,
+              away: bet.predicted_away_score
+            };
+          }
+        });
+
+        setApuestas(mapaApuestas);
+        setMisApuestasGuardadas(mapaGuardadas);
+      }
+    }
   };
 
   const cargarNotificaciones = async () => {
@@ -173,12 +208,64 @@ export default function SalaLiga() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const val = apuestas[matchId];
+    if (val === undefined || val === null) return alert("Introduce una apuesta válida.");
+
     const payload = liga.game_type === 'porra' 
       ? { user_id: user.id, match_id: matchId, predicted_home_score: Number(val.home), predicted_away_score: Number(val.away) }
       : { user_id: user.id, match_id: matchId, prediction_1x2: val };
     
-    await supabase.from('bets').upsert(payload as any, { onConflict: 'user_id, match_id' });
-    alert("¡Apuesta guardada!");
+    const { error } = await supabase.from('bets').upsert(payload as any, { onConflict: 'user_id, match_id' });
+    
+    if (error) {
+      alert("Error al guardar: " + error.message);
+    } else {
+      setMisApuestasGuardadas({ ...misApuestasGuardadas, [matchId]: val });
+      alert("¡Apuesta guardada con éxito!");
+    }
+  };
+
+  // Función para determinar el color de la barra según el estado y acierto
+  const obtenerColorBarra = (p: any, apuestaUser: any) => {
+    const horaPartido = new Date(p.match_date).getTime();
+    const ahora = new Date().getTime();
+    const partidoEmpezado = ahora >= horaPartido || p.status === 'finished';
+
+    // Si el partido ha finalizado, calculamos el color según el acierto
+    if (p.status === 'finished' && apuestaUser !== undefined) {
+      if (liga?.game_type === 'porra') {
+        const hReal = p.home_score;
+        const aReal = p.away_score;
+        const hPred = Number(apuestaUser.home);
+        const aPred = Number(apuestaUser.away);
+
+        if (hPred === hReal && aPred === aReal) {
+          return 'border-l-8 border-green-500 bg-white'; // Verde: Pleno exacto
+        } else {
+          const signoReal = hReal > aReal ? '1' : hReal < aReal ? '2' : 'X';
+          const signoPred = hPred > aPred ? '1' : hPred < aPred ? '2' : 'X';
+          if (signoPred === signoReal) {
+            return 'border-l-8 border-yellow-400 bg-white'; // Amarillo: Acertó signo
+          } else {
+            return 'border-l-8 border-red-500 bg-white'; // Rojo: Fallo total
+          }
+        }
+      } else if (liga?.game_type === 'quiniela') {
+        const signoReal = p.home_score > p.away_score ? '1' : p.home_score < p.away_score ? '2' : 'X';
+        if (apuestaUser === signoReal) {
+          return 'border-l-8 border-green-500 bg-white'; // Verde: Acertó quiniela
+        } else {
+          return 'border-l-8 border-red-500 bg-white'; // Rojo: Falló quiniela
+        }
+      }
+    }
+
+    // Si tiene apuesta guardada y aún no ha empezado -> Azul
+    if (apuestaUser !== undefined && !partidoEmpezado) {
+      return 'border-l-8 border-blue-500 bg-white';
+    }
+
+    // Por defecto gris
+    return 'border-l-8 border-gray-300 bg-white';
   };
 
   return (
@@ -220,7 +307,6 @@ export default function SalaLiga() {
 
       {vista === 'resultados' ? (
         <>
-          {/* Selector de jornadas incluyendo la Jornada 0 de Amistosos */}
           <div className="flex gap-2 mb-6 overflow-x-auto pb-2 items-center">
             <button 
               onClick={() => cargarPartidos(0)} 
@@ -243,25 +329,62 @@ export default function SalaLiga() {
           {partidos.length === 0 ? (
             <p className="text-gray-500 italic bg-white p-6 rounded shadow">No hay partidos programados para esta jornada.</p>
           ) : (
-            partidos.map((p) => (
-              <div key={p.id} className="bg-white p-4 rounded shadow mb-2 flex justify-between items-center">
-                <span>{p.home_team} vs {p.away_team} {p.status === 'finished' && `(${p.home_score} - ${p.away_score})`}</span>
-                {liga?.game_type === 'porra' ? (
-                  <div className="flex gap-2">
-                    <input type="number" defaultValue={apuestas[p.id]?.home} onChange={(e) => setApuestas({...apuestas, [p.id]: {...apuestas[p.id], home: e.target.value}})} className="w-12 border p-1"/>
-                    <input type="number" defaultValue={apuestas[p.id]?.away} onChange={(e) => setApuestas({...apuestas, [p.id]: {...apuestas[p.id], away: e.target.value}})} className="w-12 border p-1"/>
-                    <button onClick={() => guardar(p.id)} className="bg-blue-500 text-white px-2 rounded">Ok</button>
+            partidos.map((p) => {
+              const horaPartido = new Date(p.match_date).getTime();
+              const ahora = new Date().getTime();
+              const partidoEmpezado = ahora >= horaPartido || p.status === 'finished';
+              const apuestaUser = misApuestasGuardadas[p.id];
+              const estiloBarra = obtenerColorBarra(p, apuestaUser);
+
+              return (
+                <div key={p.id} className={`${estiloBarra} p-4 rounded shadow mb-3 flex justify-between items-center transition-all`}>
+                  <div>
+                    <span className="font-bold text-gray-800">{p.home_team} vs {p.away_team}</span>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {new Date(p.match_date).toLocaleString()} {p.status === 'finished' && <span className="font-bold text-black">| Resultado: {p.home_score} - {p.away_score}</span>}
+                    </div>
                   </div>
-                ) : (
-                  <div className="flex gap-2">
-                    {['1', 'X', '2'].map(op => (
-                      <button key={op} onClick={() => setApuestas({...apuestas, [p.id]: op})} className={`px-3 py-1 border rounded ${apuestas[p.id] === op ? 'bg-green-500 text-white' : 'bg-gray-100'}`}>{op}</button>
-                    ))}
-                    <button onClick={() => guardar(p.id)} className="bg-green-600 text-white px-2 rounded">Ok</button>
-                  </div>
-                )}
-              </div>
-            ))
+
+                  {partidoEmpezado ? (
+                    <span className="text-xs font-bold bg-red-100 text-red-600 px-3 py-1 rounded">
+                      {p.status === 'finished' ? 'Finalizado' : 'Apuestas Cerradas'}
+                    </span>
+                  ) : (
+                    liga?.game_type === 'porra' ? (
+                      <div className="flex gap-2 items-center">
+                        <input 
+                          type="number" 
+                          value={apuestas[p.id]?.home ?? ''} 
+                          onChange={(e) => setApuestas({...apuestas, [p.id]: {...apuestas[p.id], home: e.target.value}})} 
+                          className="w-12 border p-1 text-center rounded font-semibold"
+                        />
+                        <span>-</span>
+                        <input 
+                          type="number" 
+                          value={apuestas[p.id]?.away ?? ''} 
+                          onChange={(e) => setApuestas({...apuestas, [p.id]: {...apuestas[p.id], away: e.target.value}})} 
+                          className="w-12 border p-1 text-center rounded font-semibold"
+                        />
+                        <button onClick={() => guardar(p.id)} className="bg-blue-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-blue-700">Ok</button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2 items-center">
+                        {['1', 'X', '2'].map(op => (
+                          <button 
+                            key={op} 
+                            onClick={() => setApuestas({...apuestas, [p.id]: op})} 
+                            className={`px-3 py-1 border rounded font-bold ${apuestas[p.id] === op ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                          >
+                            {op}
+                          </button>
+                        ))}
+                        <button onClick={() => guardar(p.id)} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-green-700">Ok</button>
+                      </div>
+                    )
+                  )}
+                </div>
+              );
+            })
           )}
         </>
       ) : vista === 'clasificacion' ? (
